@@ -1,3 +1,4 @@
+#include <asm/uaccess.h>
 #include <linux/cdev.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
@@ -6,7 +7,7 @@
 #include <linux/slab.h>
 #include "scull.h"
 
-MODULE_LICENSE("Dual BSD/GPL");
+//MODULE_LICENSE("Dual BSD/GPL");
 
 int get_major_version(void)
 {
@@ -26,6 +27,11 @@ int get_major_version(void)
 
 static int scull_init(void)
 {
+    int scull_major = SCULL_MAJOR;
+    int scull_minor = SCULL_MINOR;
+    int scull_nr_devs = SCULL_NR_DEVS;
+    int scull_quantum = SCULL_QUANTUM;
+    int scull_qset = SCULL_QSET;
     printk(KERN_INFO "init_module() called\n");
     return 0;
 }
@@ -77,9 +83,9 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
 
     // read only up to the end of this quantum
     if (count > quantum - q_pos)
-        count = qunatum - q_pos;
+        count = quantum - q_pos;
 
-    if (copy_to_user(buf, dprt->data[s_pos] + q_pos, count)) {
+    if (copy_to_user(buf, dptr->data[s_pos] + q_pos, count)) {
         retval = -EFAULT;
         goto out;
     }
@@ -97,6 +103,7 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
     struct scull_qset *dptr;
     int quantum = dev->quantum, qset = dev->qset;
     int itemsize = quantum * qset;
+    int item, s_pos, q_pos, rest;
     ssize_t retval = -ENOMEM; // value used in "goto out" statements
 
 
@@ -171,6 +178,13 @@ static void scull_setup_cdev(struct scull_dev *dev, int index)
 {
     int err, devno = MKDEV(scull_major, scull_minor + index);
 
+    // scull's file operation structure
+    struct file_operations scull_fops = {
+        .owner = THIS_MODULE,
+        .read = scull_read,
+        .write = scull_write,
+        .open = scull_open,
+    };
     cdev_init(&dev->cdev, &scull_fops);
     dev->cdev.owner = THIS_MODULE;
     dev->cdev.ops = &scull_fops;
@@ -179,5 +193,5 @@ static void scull_setup_cdev(struct scull_dev *dev, int index)
     printk(KERN_NOTICE "Error %d adding scull%d", err, index);
 }
 
-module_init(scull_init);
-module_exit(scull_exit);
+// module_init(scull_init);
+// module_exit(scull_exit);
