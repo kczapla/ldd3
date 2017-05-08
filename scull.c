@@ -9,31 +9,40 @@
 
 //MODULE_LICENSE("Dual BSD/GPL");
 
-int get_major_version(void)
+static int scull_init(void)
 {
+    dev_t dev;
     int result;
-    if (scull_major) {
+
+    scull_major = SCULL_MAJOR;
+    scull_minor = SCULL_MINOR;
+    scull_nr_devs = SCULL_NR_DEVS;
+    scull_quantum = SCULL_QUANTUM;
+    scull_qset = SCULL_QSET;
+    
+    if ( scull_major ) {
         dev = MKDEV(scull_major, scull_minor);
         result = register_chrdev_region(dev, scull_nr_devs, "scull");
     } else {
         result = alloc_chrdev_region(&dev, scull_minor, scull_nr_devs, "scull");
         scull_major = MAJOR(dev);
     }
-    if (result < 0) {
+    if ( result < 0 ) {
         printk(KERN_WARNING "scull: can't get major %d\n", scull_major);
+        return result;
     }
-    return result;
-}
-
-static int scull_init(void)
-{
-    int scull_major = SCULL_MAJOR;
-    int scull_minor = SCULL_MINOR;
-    int scull_nr_devs = SCULL_NR_DEVS;
-    int scull_quantum = SCULL_QUANTUM;
-    int scull_qset = SCULL_QSET;
+//     struct scull_dev dev {
+//         .quantum = scull_quantum,
+//         .qset = scull_qset,
+//     };
+//    scull_setup_cdev(&dev, 1);
     printk(KERN_INFO "init_module() called\n");
     return 0;
+}
+
+struct scull_qset *scull_follow(struct scull_dev *dev, long item)
+{
+    return &dev->data[item];
 }
 
 static void scull_exit(void)
@@ -48,7 +57,7 @@ int scull_open(struct inode *inode, struct file *filp)
     dev = container_of(inode->i_cdev, struct scull_dev, cdev);
     filp->private_data = dev; // for other methods
 
-    if ( (filp->f_flags & O_ACCMODE) == O_WRONLY) {
+    if (  (filp->f_flags & O_ACCMODE) == O_WRONLY ) {
         scull_trim(dev); // ignore errors
     }
     return 0; //success
@@ -63,11 +72,11 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     int item, s_pos, q_pos, rest;
     ssize_t retval = 0;
 
-    if (down_interruptible(&dev->sem))
+    if ( down_interruptible(&dev->sem) )
         return -ERESTARTSYS;
-    if (*f_pos >= dev->size)
+    if ( *f_pos >= dev->size )
         goto out;
-    if (*f_pos + count > dev->size)
+    if ( *f_pos + count > dev->size )
         count = dev->size - *f_pos;
 
     // find listitem, qset index, and offset in the quantum
@@ -78,14 +87,14 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     // follow the lis tup to the right position (defined elsewhere)
     dptr = scull_follow(dev, item);
 
-    if (dptr == NULL || !dptr->data || !dptr->data[s_pos])
+    if ( dptr == NULL || !dptr->data || !dptr->data[s_pos] )
         goto out; //don't fill holes
 
     // read only up to the end of this quantum
-    if (count > quantum - q_pos)
+    if ( count > quantum - q_pos )
         count = quantum - q_pos;
 
-    if (copy_to_user(buf, dptr->data[s_pos] + q_pos, count)) {
+    if ( copy_to_user(buf, dptr->data[s_pos] + q_pos, count) ) {
         retval = -EFAULT;
         goto out;
     }
@@ -95,6 +104,11 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     out:
         up(&dev->sem);
         return retval;
+}
+
+int scull_release(struct inode *inode, struct file *filp)
+{
+    return 0;
 }
 
 ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, loff_t *f_pos)
@@ -107,7 +121,7 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
     ssize_t retval = -ENOMEM; // value used in "goto out" statements
 
 
-    if (down_interruptible(&dev->sem))
+    if ( down_interruptible(&dev->sem) )
         return -ERESTARTSYS;
 
     // find listitem, qset index, and offset in the quantum
@@ -118,25 +132,25 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
     // follow the lis tup to the right position (defined elsewhere)
     dptr = scull_follow(dev, item);
 
-    if (dptr == NULL)
+    if ( dptr == NULL )
         goto out;
-    if (!dptr->data) {
-        dptr->data = kmalloc(qset *sizeof(char *), GFP_KERNEL);
-        if (!dptr->data)
+    if ( !dptr->data ) {
+        dptr->data = kmalloc(qset * sizeof(char *), GFP_KERNEL);
+        if ( !dptr->data )
             goto out;
         memset(dptr->data, 0, qset * sizeof(char *));
     }
-    if (!dptr->data[s_pos]) {
+    if ( !dptr->data[s_pos] ) {
         dptr->data[s_pos] = kmalloc(quantum, GFP_KERNEL);
-        if (!dptr->data[s_pos])
+        if ( !dptr->data[s_pos] )
             goto out;
     }
 
     // write onlu up to the end of this quantum
-    if (count > quantum - q_pos)
+    if ( count > quantum - q_pos )
         count = quantum - q_pos;
 
-    if (copy_from_user(dptr->data[s_pos] + q_pos, buf, count)) {
+    if ( copy_from_user(dptr->data[s_pos] + q_pos, buf, count) ) {
         retval = EFAULT;
         goto out;
     }
@@ -144,7 +158,7 @@ ssize_t scull_write(struct file *filp, const char __user *buf, size_t count, lof
     retval = count;
 
     // update the size
-    if (dev->size < *f_pos)
+    if ( dev->size < *f_pos )
         dev->size = *f_pos;
 
     out:
@@ -158,7 +172,7 @@ int scull_trim(struct scull_dev *dev)
     int qset = dev->qset; // "dev" is not null
     int i;
     for (dptr = dev->data; dptr; dptr = next) { // all list items
-        if (dptr->data) {
+        if ( dptr->data ) {
             for (i = 0; i < qset; i++)
                 kfree(dptr->data[i]);
             kfree(dptr->data);
@@ -189,7 +203,7 @@ static void scull_setup_cdev(struct scull_dev *dev, int index)
     dev->cdev.owner = THIS_MODULE;
     dev->cdev.ops = &scull_fops;
     err = cdev_add(&dev->cdev, devno, 1);
-    if (err)
+    if ( err )
     printk(KERN_NOTICE "Error %d adding scull%d", err, index);
 }
 
