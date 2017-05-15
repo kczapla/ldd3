@@ -1,3 +1,16 @@
+#undef PDEBUG
+#ifdef SCULL_DEBUG
+#  ifdef __KERNEL__
+   // Debugging in the kernel space
+#    define PDEBUG(fmt, args...) fprintk( KERN_DEBUG "scull: " fmt, ## args)
+#  else
+   // Debugging in the user space
+#    define PDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
+#  endif
+#else
+#  define pdebug(fmt, args...) //nothing
+#endif
+
 #include <asm/uaccess.h>
 #include <linux/fs.h>
 

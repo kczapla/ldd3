@@ -121,6 +121,7 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     int item, s_pos, q_pos, rest;
     ssize_t retval = 0;
 
+    printk(KERN_WARNING "scull_read->count: %lu", count);
     if ( down_interruptible(&dev->sem) )
         return -ERESTARTSYS;
     if ( *f_pos >= dev->size )
@@ -142,12 +143,11 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     // read only up to the end of this quantum
     if ( count > quantum - q_pos )
         count = quantum - q_pos;
-
     if ( copy_to_user(buf, dptr->data[s_pos] + q_pos, count) ) {
         retval = -EFAULT;
         goto out;
     }
-    *f_pos += count;
+    *f_pos = count;
     retval = count;
 
     out:
