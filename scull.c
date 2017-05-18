@@ -2,8 +2,10 @@
 #include <linux/cdev.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/proc_fs.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/seq_file.h>
 #include <linux/slab.h>
 #include "scull.h"
 
@@ -23,6 +25,71 @@ struct file_operations scull_fops = {
     .open = scull_open,
 };
 
+struct file_operations scull_proc_ops = {
+    .owner = THIS_MODULE,
+    .open = scull_proc_open,
+    .read = seq_read,
+    .llseek = seq_lseek,
+    .release = seq_release
+};
+
+struct seq_operations scull_seq_ops = {
+    .start = scull_seq_start,
+    .next = scull_seq_next,
+    .stop = scull_seq_stop,
+    .show = scull_seq_show
+};
+
+
+static int scull_proc_open(struct inode *inode, struct file *file)
+{
+    return seq_open(file, &scull_seq_ops);
+}
+
+static void *scull_seq_start(struct seq_file *s, loff_t *pos)
+{
+    if (*pos >= scull_nr_devs) {
+        return NULL;
+    }
+    return scull_devs + *pos;
+}
+
+void scull_seq_stop(struct seq_file *s, void *v)
+{
+    printk(KERN_INFO "scull_seq_stop called\n");
+    
+}
+
+static void *scull_seq_next(struct seq_file *s, void *v, loff_t *pos)
+{
+    (*pos)++;
+    if (*pos >= scull_nr_devs)
+        return NULL;
+    return scull_devs + *pos;
+}
+
+int scull_seq_show(struct seq_file *s, void *v)
+{
+    struct scull_dev *dev = (struct scull_dev *) v;
+    struct scull_qset *d;
+    int i;
+    
+    if (down_interruptible(&dev->sem))
+        return -ERESTARTSYS;
+    seq_printf(s, "\nDevice %i: qset %i, q %i, sz %li\n",
+               (int) (dev - scull_devs), dev->qset, dev->quantum,
+               dev->size);
+    for (d = dev->data; d; d = d->next) { // scan the list
+        seq_printf(s, " item at %p, qset at %p\n", d, d->data);
+        if (d->data && !d->next)
+            for (i = 0; i < dev->qset; i++) {
+                if (d->data[i])
+                    seq_printf(s, "    % 4i: %8p\n", i, d->data[i]);
+            }
+    }
+    up(&dev->sem);
+    return 0;
+}
 
 static int scull_init(void)
 {
@@ -50,6 +117,7 @@ static int scull_init(void)
         sema_init(&scull_devs[i].sem, 1);
         scull_setup_cdev(&scull_devs[i], i);
     }
+    proc_create("scullseq", 0, NULL, &scull_proc_ops);
     printk(KERN_INFO "init_module() called\n");
     return 0;
 
@@ -121,6 +189,7 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     int item, s_pos, q_pos, rest;
     ssize_t retval = 0;
 
+    printk(KERN_WARNING "scull_read->count: %lu", count);
     if ( down_interruptible(&dev->sem) )
         return -ERESTARTSYS;
     if ( *f_pos >= dev->size )
@@ -142,7 +211,6 @@ ssize_t scull_read(struct file *filp, char __user *buf, size_t count, loff_t *f_
     // read only up to the end of this quantum
     if ( count > quantum - q_pos )
         count = quantum - q_pos;
-
     if ( copy_to_user(buf, dptr->data[s_pos] + q_pos, count) ) {
         retval = -EFAULT;
         goto out;

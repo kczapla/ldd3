@@ -1,3 +1,16 @@
+#undef PDEBUG
+#ifdef SCULL_DEBUG
+#  ifdef __KERNEL__
+   // Debugging in the kernel space
+#    define PDEBUG(fmt, args...) fprintk( KERN_DEBUG "scull: " fmt, ## args)
+#  else
+   // Debugging in the user space
+#    define PDEBUG(fmt, args...) fprintf(stderr, fmt, ## args)
+#  endif
+#else
+#  define pdebug(fmt, args...) //nothing
+#endif
+
 #include <asm/uaccess.h>
 #include <linux/fs.h>
 
@@ -16,6 +29,11 @@ struct scull_dev;
 struct scull_qset;
 
 // scull_fops methods
+static int scull_proc_open(struct inode *inode, struct file *file);
+static void *scull_seq_start(struct seq_file *s, loff_t *pos);
+void scull_seq_stop(struct seq_file *s, void *v);
+static void *scull_seq_next(struct seq_file *s, void *v, loff_t *pos);
+int scull_seq_show(struct seq_file *s, void *v);
 static void scull_cleanup_module(void);
 static void scull_exit(void);
 struct scull_qset *scull_follow(struct scull_dev *dev, int n);
