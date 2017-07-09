@@ -2,6 +2,7 @@
 #include <linux/cdev.h>
 #include <linux/errno.h>
 #include <linux/fs.h>
+#include <linux/ioctl.h>
 #include <linux/proc_fs.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -21,6 +22,7 @@ int scull_qset = SCULL_QSET;
 struct file_operations scull_fops = {
     .owner = THIS_MODULE,
     .read = scull_read,
+    .unlocked_ioctl = scull_unlocked_ioctl,
     .write = scull_write,
     .open = scull_open,
 };
@@ -40,6 +42,59 @@ struct seq_operations scull_seq_ops = {
     .show = scull_seq_show
 };
 
+long scull_unlocked_ioctl(struct file *flip, unsigned int cmd, unsigned long arg)
+{
+    int tmp;
+    long retval = 0;
+    printk(KERN_INFO "in ioctl func\n");
+
+    switch(cmd) {
+
+        case SCULL_IOCRESET:
+          scull_quantum = SCULL_QUANTUM;
+          scull_qset = SCULL_QSET;
+          break;
+
+        case SCULL_IOCSQUANTUM:
+          if (!capable (CAP_SYS_ADMIN))
+              return -EPERM;
+          retval = __get_user(scull_quantum, (int __user *)arg);
+          break;
+
+        case SCULL_IOCTQUANTUM:
+          if (!capable (CAP_SYS_ADMIN))
+              return -EPERM;
+          scull_quantum = arg;
+          break;
+
+        case SCULL_IOCGQUANTUM:
+          retval = __put_user(scull_quantum, (int __user *)arg);
+          break;
+
+        case SCULL_IOCQQUANTUM:
+          return scull_quantum;
+
+        case SCULL_IOCXQUANTUM:
+          if (!capable(CAP_SYS_ADMIN))
+              return -EPERM;
+          tmp = scull_quantum;
+          retval = __get_user(scull_quantum, (int __user *)arg);
+          if (retval == 0)
+              retval = __put_user(tmp, (int __user *)arg);
+          break;
+
+        case SCULL_IOCHQUANTUM:
+          if (!capable(CAP_SYS_ADMIN))
+              return -EPERM;
+          tmp = scull_quantum;
+          scull_quantum = arg;
+          return tmp;
+
+        default:
+          return -ENOTTY;
+    }
+    return retval;
+}
 
 static int scull_proc_open(struct inode *inode, struct file *file)
 {
