@@ -1,3 +1,7 @@
+#include <asm/uaccess.h>
+#include <asm-generic/ioctl.h>
+#include <linux/fs.h>
+
 #undef PDEBUG
 #ifdef SCULL_DEBUG
 #  ifdef __KERNEL__
@@ -11,8 +15,31 @@
 #  define pdebug(fmt, args...) //nothing
 #endif
 
-#include <asm/uaccess.h>
-#include <linux/fs.h>
+// Magic number
+#define SCULL_IOC_MAGIC 0xFE
+#define SCULL_IOCRESET _IO(SCULL_IOC_MAGIC, 0)
+/* 
+* S means "Set" through a ptr.
+* T means "Tell" directly with the argument value.
+* G means "Get": reply by setting through a pointer.
+* Q means "Query": response is on the return value.
+* X means "eXchange":  Switch G and S atomically.
+* H means "sHift": switch T and Q atomically.
+*/
+#define SCULL_IOCSQUANTUM _IOW(SCULL_IOC_MAGIC, 1, int)
+#define SCULL_IOCSQSET    _IOW(SCULL_IOC_MAGIC, 2, int)
+#define SCULL_IOCTQUANTUM _IO(SCULL_IOC_MAGIC, 3)
+#define SCULL_IOCTQSET    _IO(SCULL_IOC_MAGIC, 4)
+#define SCULL_IOCGQUANTUM _IOR(SCULL_IOC_MAGIC, 5, int)
+#define SCULL_IOCGQSET    _IOR(SCULL_IOC_MAGIC, 6, int)
+#define SCULL_IOCQQUANTUM _IO(SCULL_IOC_MAGIC, 7)
+#define SCULL_IOCQQSET    _IO(SCULL_IOC_MAGIC, 8)
+#define SCULL_IOCXQUANTUM _IOWR(SCULL_IOC_MAGIC, 9, int)
+#define SCULL_IOCXQSET    _IOWR(SCULL_IOC_MAGIC, 10, int)
+#define SCULL_IOCHQUANTUM _IO(SCULL_IOC_MAGIC, 11)
+#define SCULL_IOCHQSET    _IO(SCULL_IOC_MAGIC, 12)
+
+#define SCULL_IOC_MAXNR 14
 
 #define SCULL_MAJOR 0
 #define SCULL_MINOR 0
@@ -29,6 +56,7 @@ struct scull_dev;
 struct scull_qset;
 
 // scull_fops methods
+long scull_unlocked_ioctl(struct file *flip, unsigned int cmd, unsigned long arg);
 static int scull_proc_open(struct inode *inode, struct file *file);
 static void *scull_seq_start(struct seq_file *s, loff_t *pos);
 void scull_seq_stop(struct seq_file *s, void *v);
