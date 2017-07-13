@@ -10,7 +10,7 @@ endif
 
 CFLAGS += $(DEBFLAGS)
 
-obj-m += hello.o scull.o
+obj-m += hello.o scull.o pscull.o
 all:
 	make -C ~/kernel M=$(PWD) modules CFLAGS='$(CFLAGS)'
 clean:
